@@ -1,75 +1,38 @@
-import aiosqlite
-import logging
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy import select
+from models import Base, Item
 
-DB_NAME = "shop.db"
+# Подключаемся к файлу bot.db (SQLAlchemy создаст его сама)
+engine = create_async_engine(url='sqlite+aiosqlite:////bot.db')
+async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 async def init_db():
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    price INTEGER
-                ) 
-            """)
-            # Давай сразу добавим товары, если их нет (чтобы было что тестить)
-            # Я помогу с логикой проверки:
-            cursor = await db.execute("SELECT count(*) FROM items")
-            if (await cursor.fetchone())[0] == 0:
-                await db.execute("INSERT INTO items (name, price) VALUES ('Хлеб', 50)")
-                await db.execute("INSERT INTO items (name, price) VALUES ('Молоко', 80)")
-                await db.execute("INSERT INTO items (name, price) VALUES ('Шоколадка', 100)")
-                await db.commit()
-                logging.info("Default items added.")
-                
-        logging.info(f"Database {DB_NAME} initialized.")
-    except Exception as e:
-        logging.error(f"Error initializing database: {e}")
-
-async def add_item(name, price):
-    # ТУТ (INSERT)
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "INSERT INTO items (name, price) VALUES (?, ?)",
-                (name, price)
-            )
-            await db.commit()
-        logging.info(f"Item {name} added.")
-    except Exception as e:
-        logging.error(f"Error adding item: {e}")
-    pass
+    """Создаем таблицы и наполняем тестовыми данными"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    # Проверка: если товаров нет, добавим их
+    async with async_session() as session:
+        result = await session.execute(select(Item))
+        items = result.scalars().all()
+        
+        if not items:
+            session.add(Item(name='MacBook Air', price=1000))
+            session.add(Item(name='iPhone 15', price=800))
+            session.add(Item(name='AirPods Pro', price=200))
+            await session.commit()
+            print("✅ Тестовые товары добавлены в базу")
 
 async def get_all_items():
-    """
-    Получаем товары с  БД
-    """
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute("SELECT * FROM items ORDER BY id ASC")
-            rows = await cursor.fetchall()
-    except Exception as e:
-        logging.error(f"Error getting items from database: {e}")
-    return rows
+    """Получить все товары"""
+    async with async_session() as session:
+        query = select(Item)
+        result = await session.execute(query)
+        return result.scalars().all()
 
 async def get_item(item_id):
-    """
-    Получаем цену конкретного товара
-    """
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-
-            row = await cursor.fetchone()
-
-            if row:
-                return dict(row)
-            return None
-    
-    except Exception as e:
-        logging.error(f"Error getting item from database: {e}")
-        return None
-    pass
+    """Получить один товар по ID"""
+    async with async_session() as session:
+        query = select(Item).where(Item.id == item_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
