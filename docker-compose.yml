@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: crypto_bot
+    restart: always # Если бот упадет, докер поднимет его сам
+    volumes:
+      # СЛЕВА: файл на твоем компе. СПРАВА: путь внутри контейнера
+      # Замени 'my_database.db' на реальное название твоего файла с базой!
+      - ./my_database.db:/app/my_database.db
+    env_file:
+      - .env # Чтобы токен подтянулся сам
