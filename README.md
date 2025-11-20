@@ -47,4 +47,3 @@
 
 ---
 👨‍💻 **Developed by [Bogdan Betskov](https://freelancehunt.com/freelancer/bground.html )**
-```
